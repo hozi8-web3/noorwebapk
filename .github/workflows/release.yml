@@ -1,15 +1,15 @@
-name: Build & Release APK
+name: NoorWeb Build & Release (Android & iOS)
 
 on:
   push:
     branches:
-      - main # Triggers every time you push code to the main branch
-  workflow_dispatch: # Allows manual UI triggering
+      - main
+  workflow_dispatch:
 
 jobs:
-  build_and_release:
+  build_android:
+    name: Build Android APK
     runs-on: ubuntu-latest
-    
     steps:
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
@@ -32,13 +32,69 @@ jobs:
       - name: 🏗️ Build APK
         run: flutter build apk --release
 
-      - name: 🚀 Create GitHub Release
+      - name: 📤 Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+  build_ios:
+    name: Build iOS IPA
+    runs-on: macos-latest
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🐦 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: 📦 Install dependencies
+        run: flutter pub get
+
+      - name: 🏗️ Build iOS App (No Codesign)
+        run: flutter build ios --release --no-codesign
+
+      - name: 📦 Compress into IPA
+        run: |
+          mkdir -p Payload
+          cp -r build/ios/iphoneos/Runner.app Payload/
+          zip -r NoorWeb_iOS.ipa Payload
+
+      - name: 📤 Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: NoorWeb_iOS.ipa
+
+  create_release:
+    name: Create GitHub Release
+    needs: [build_android, build_ios]
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Download Android APK
+        uses: actions/download-artifact@v4
+        with:
+          name: android-apk
+          path: artifacts/android
+
+      - name: 📥 Download iOS IPA
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-ipa
+          path: artifacts/ios
+
+      - name: 🚀 Publish GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          name: Auto-Release ${{ github.sha }}
-          tag_name: build-${{ github.run_number }}
+          name: NoorWeb v1.0.${{ github.run_number }}
+          tag_name: v1.0.${{ github.run_number }}
           draft: false
           prerelease: false
-          files: build/app/outputs/flutter-apk/app-release.apk
+          files: |
+            artifacts/android/app-release.apk
+            artifacts/ios/NoorWeb_iOS.ipa
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
